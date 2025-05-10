@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: env-config
+  namespace: dev
+data:
+  ENV: development
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: env-config
+  namespace: staging
+data:
+  ENV: staging
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: env-config
+  namespace: prod
+data:
+  ENV: production
