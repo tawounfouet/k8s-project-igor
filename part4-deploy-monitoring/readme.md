@@ -426,6 +426,16 @@ Check that all components are running:
 ```sh
 # Check Prometheus and Grafana
 kubectl get pods -n monitoring
+kubectl get services -n monitoring
+
+#  Check Pod Details
+kubectl describe pod prometheus-0 -n monitoring
+kubectl describe pod grafana-0 -n monitoring
+
+#  Check Service Details
+kubectl describe service prometheus -n monitoring
+kubectl describe service grafana -n monitoring
+
 
 # Check NodePort services
 kubectl get services -n dev
@@ -433,10 +443,20 @@ kubectl get services -n prod
 
 # Check deployments with their strategies
 kubectl describe deployment backend -n dev
-kubectl describe deployment backend -n prod
+kubectl describe deployment backend -n dev
 
 # Check HPA
 kubectl get hpa -n prod
+
+
+
+# 3. Enable Port Forwarding
+# For Prometheus
+kubectl port-forward -n monitoring svc/prometheus 9090:9090
+
+# In another terminal, for Grafana
+kubectl port-forward -n monitoring svc/grafana 3000:3000
+
 ```
 
 ### Step 4: Access the Monitoring Tools
@@ -446,8 +466,127 @@ MINIKUBE_IP=$(minikube ip)
 
 # Access Prometheus
 echo "Prometheus available at: http://$MINIKUBE_IP:30090"
+# Prometheus available at: http://192.168.49.2:30090
+curl -X GET http://$MINIKUBE_IP:30090/metrics
 
 # Access Grafana
 echo "Grafana available at: http://$MINIKUBE_IP:30030"
 # Default credentials: admin/admin
+# Grafana available at: http://192.168.49.2:30030
+
+curl -X GET http://$MINIKUBE_IP:30030
+
 ```
+
+
+### Running Port Forwarding in Detached Mode
+To run port forwarding in detached mode (in the background), you can use this script. Save it as start-monitoring.sh in your part4-deploy-monitoring directory:
+
+`start-monitoring.sh` 
+```sh
+#!/bin/bash
+# filepath: /Users/awf/Infrastruture/k8s/k8s-project/part4-deploy-monitoring/start-monitoring.sh
+
+# Kill any existing port forwards for these ports
+echo "Stopping any existing port forwards..."
+lsof -ti:9090 | xargs kill -9 2>/dev/null || true
+lsof -ti:3000 | xargs kill -9 2>/dev/null || true
+
+# Start Prometheus port forwarding in background
+echo "Starting Prometheus port forwarding..."
+kubectl port-forward -n monitoring svc/prometheus 9090:9090 > /tmp/prometheus-forward.log 2>&1 &
+PROMETHEUS_PID=$!
+echo "Prometheus PID: $PROMETHEUS_PID"
+
+# Start Grafana port forwarding in background
+echo "Starting Grafana port forwarding..."
+kubectl port-forward -n monitoring svc/grafana 3000:3000 > /tmp/grafana-forward.log 2>&1 &
+GRAFANA_PID=$!
+echo "Grafana PID: $GRAFANA_PID"
+
+# Save PIDs to file for easy cleanup later
+echo "$PROMETHEUS_PID $GRAFANA_PID" > /tmp/monitoring-pids.txt
+
+echo "Port forwarding started in background"
+echo "Prometheus available at: http://localhost:9090"
+echo "Grafana available at: http://localhost:3000"
+echo ""
+echo "To stop port forwarding, run: ./stop-monitoring.sh"
+```
+
+complementary script to stop the port forwarding when you're done:
+`stop-monitoring.sh`
+```sh
+#!/bin/bash
+# filepath: /Users/awf/Infrastruture/k8s/k8s-project/part4-deploy-monitoring/stop-monitoring.sh
+
+if [ -f /tmp/monitoring-pids.txt ]; then
+    echo "Stopping monitoring port forwards..."
+    PIDS=$(cat /tmp/monitoring-pids.txt)
+    for PID in $PIDS; do
+        if ps -p $PID > /dev/null; then
+            echo "Killing process $PID"
+            kill $PID
+        fi
+    done
+    rm /tmp/monitoring-pids.txt
+    echo "Port forwarding stopped"
+else
+    echo "No monitoring processes found"
+    
+    # Kill by port as a fallback
+    echo "Checking for processes on monitoring ports..."
+    lsof -ti:9090 | xargs kill -9 2>/dev/null || true
+    lsof -ti:3000 | xargs kill -9 2>/dev/null || true
+    echo "Done"
+fi
+```
+
+Make both scripts executable:
+
+```sh
+# chmod +x /Users/awf/Infrastruture/k8s/k8s-project/part4-deploy-monitoring/start-monitoring.sh
+# chmod +x /Users/awf/Infrastruture/k8s/k8s-project/part4-deploy-monitoring/stop-monitoring.sh
+
+chmod +x start-monitoring.sh
+chmod +x stop-monitoring.sh
+
+# or from the parent directory
+chmod +x part4-deploy-monitoring/start-monitoring.sh
+chmod +x part4-deploy-monitoring/stop-monitoring.sh
+```
+
+#### How to Use
+Start monitoring:
+```sh
+./start-monitoring.sh
+```
+Stop monitoring:
+```sh
+./stop-monitoring.sh
+```
+### Step 5: Generate Load
+```sh
+# Generate load on the backend API
+# Make sure to replace the URL with the correct one
+# URL=$(minikube ip):30001/api
+# ./load-generator.sh $URL 1000 10
+# or
+./load-generator.sh http://$(minikube ip):30001/api 1000 10
+```
+
+
+## Detached Port Forwarding
+
+For convenience, you can run port forwarding in detached mode (background):
+
+```bash
+# Start port forwarding in background
+./start-monitoring.sh
+
+# Access services
+# Prometheus: http://localhost:9090
+# Grafana: http://localhost:3000 (default: admin/admin)
+
+# When finished, stop port forwarding
+./stop-monitoring.sh
