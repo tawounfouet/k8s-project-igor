@@ -590,3 +590,4 @@ For convenience, you can run port forwarding in detached mode (background):
 
 # When finished, stop port forwarding
 ./stop-monitoring.sh
+```
